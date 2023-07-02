@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-mysql
+spec:
+  selector:
+    matchLabels:
+      app: webapp-mysql
+  template:
+    metadata:
+      labels:
+        app: webapp-mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "root"
+        - name: MYSQL_DATABASE
+          value: "webchat"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-mysql
+spec:
+  selector:
+    app: webapp-mysql
+  ports:
+  - port: 3306
+    targetPort: 3306
+    name: http
+  - port: 9464
+    targetPort: 9464
+    name: metrics
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: "/metrics"
+      labels:
+        app: webapp
+    spec:
+      containers:
+      - name: webapp
+        image: rafaferreira011/imersao-gpt-webapp:v1
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        - name: DATABASE_URL
+          value: mysql://root:root@webapp-mysql:3306/webchat
+        - name: NEXTAUTH_URL
+          value: http://a3d814cdb9ff34d828c3345034c7a94c-1516489263.us-east-1.elb.amazonaws.com/api/auth
+        - name: NEXTAUTH_SECRET
+          value: "123456"
+        - name: KEYCLOAK_CLIENT_ID
+          value: gpt-webapp
+        - name: KEYCLOAK_CLIENT_SECRET
+          value: KEZx2NJciZJ7Ke3Vpz7XwayXqI0gVK08
+        - name: KEYCLOAK_ISSUER
+          value: http://a4fbb43c2264642fa865411576bebf45-655234358.us-east-1.elb.amazonaws.com/realms/master
+        - name: CHATSERVICE_URL
+          value: "chatservice:50051"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp
+spec:
+  selector:
+    app: webapp
+  type: LoadBalancer
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 3000
+      #nodePort: 30000
+      name: http
+    # - port: 9464
+    #   protocol: TCP
+    #   targetPort: 9464
+    #   #nodePort: 30000
+    #   name: metrics
